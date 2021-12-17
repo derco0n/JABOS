@@ -33,6 +33,17 @@ if [ -z "$2" ]; then
     exit 2;
 fi
 
+###
+### Check if certutil is installed
+###
+installed=$(apt list --installed 2> /dev/null | grep libnss3-tools)
+
+if [[ -z $installed ]]; then
+    echo "certutil is not installed. Install it first using command: >>sudo apt install libnss3-tools -y<<"
+    exit 3
+else
+     echo "libnss3-tools is installed. Assuming certutil is available"
+fi
 
 
 certfile=$1
