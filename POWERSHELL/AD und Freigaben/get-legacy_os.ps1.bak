@@ -1,0 +1,138 @@
+<#
+Detects the state of legacy Windows-Edition in an Active-Directory
+D. Maienhöfer, 2021/11
+#>
+
+$allcomputers = get-adcomputer -filter * -properties samaccountname,operatingsystem,operatingsystemversion,enabled | select-object -Property samaccountname,operatingsystem,operatingsystemversion,enabled
+
+$winservercount=0
+$winclientcount=0
+$winlegacyclientcount=0
+$winlegacyservercount=0
+$olderthanwin7=0
+$win7=0
+$win10=0
+$otheros=0
+
+$supported_win10builds=@(
+    "19044", #21H2 - 13.06.2023
+    "19043", #21H1 - 13.12.2022
+    "19042" #20H2 - 10.05.2022    
+)
+
+$supported_win11builds=@(
+    "22000" #21H2 - 10.10.2023   
+)
+
+$supported_winsrvbuilds=@(
+    "20348", #Windows Server 2022 - 13.10.2026
+    "19042", #Windows Server, Version 20H2 - 10.05.2022    
+    "17763", #Windows Server 2019 (Version 1809) - 09.01.2024
+    "14393" #Windows Server 2016 (Version 1607)- 11.01.2022
+)
+
+foreach ($computer in $allcomputers){
+    $islegacy=$false
+    if ($computer.operatingsystem -like '*Windows*'){
+        if ($computer.operatingsystem -like '*Server*'){
+
+            $winservercount+=1
+            [bool]$validversionfound=$false                
+                foreach ($supported in $supported_winsrvbuilds){
+                    $searchfor=("*"+$supported+"*")
+                    if ($computer.operatingsystemversion -like $searchfor ){
+                        $validversionfound=$true  # The server runs an OS that is still supported
+                        break
+                    }
+                }
+                if (!$validversionfound){
+                    # Legacy-OS
+                    $islegacy=$true
+                    $winlegacyservercount+=1
+                }
+        }
+        else {
+            $winclientcount+=1
+            if ($computer.operatingsystem -notlike '*Windows 8.1*' -and $computer.operatingsystem -notlike '*Windows 10*' -and $computer.operatingsystem -notlike '*Windows 11*'){
+                # Legacy-OS
+                $islegacy=$true
+                $winlegacyclientcount+=1
+                if($computer.operatingsystem -notlike '*Windows 7*'){
+                    $olderthanwin7+=1
+                }
+            }
+            if ($computer.operatingsystem -like '*Windows 7*'){
+                $win7+=1
+            }            
+            elseif($computer.operatingsystem -like '*Windows 10*'){
+                $win10+=1
+                [bool]$validversionfound=$false                
+                foreach ($supported in $supported_win10builds){
+                    $searchfor=("*"+$supported+"*")
+                    if ($computer.operatingsystemversion -like $searchfor ){
+                        $validversionfound=$true  # The client runs an OS that is still supported
+                        break
+                    }
+                }
+                if (!$validversionfound){
+                    # Legacy-OS
+                    $islegacy=$true
+                    $winlegacyclientcount+=1
+                }
+            }
+            elseif($computer.operatingsystem -like '*Windows 11*'){
+                $win11+=1
+                [bool]$validversionfound=$false                
+                foreach ($supported in $supported_win11builds){
+                    $searchfor=("*"+$supported+"*")
+                    if ($computer.operatingsystemversion -like $searchfor ){
+                        $validversionfound=$true  # The client runs an OS that is still supported
+                        break
+                    }
+                }
+                if (!$validversionfound){
+                    # Legacy-OS
+                    $islegacy=$true
+                    $winlegacyclientcount+=1
+                }
+            }
+        }
+    }
+    else {
+        $otheros+=1
+    }
+
+    $computer | Add-Member -Force -MemberType NoteProperty -Name "Is_Unsupported" -Value $islegacy
+}
+
+#$allcomputers | Format-Table
+$allcomputers | export-csv -NoTypeInformation -Encoding utf8 -Path "C:\temp\ad_os_enumeration.csv"
+
+Write-Host ("Non-Windows: " + $otheros)
+Write-Host ("Windows-Servers Total: " + $winservercount)
+if ($winlegacyservercount -gt 0){
+    $percentage=1/$winservercount*$winlegacyservercount*100
+    Write-Warning ("Windows-Servers on unspported OS-Release: " + $winlegacyservercount + " ( "+[math]::Round($percentage, 2)+"% )")
+}
+Write-Host ("Windows-Clients Total: " + $winclientcount)
+if ($winlegacyclientcount -gt 0){
+    $percentage=1/$winclientcount*$winlegacyclientcount*100
+    Write-Warning ("Windows-Clients on unspported OS-Release: " + $winlegacyclientcount + " ( "+ [math]::Round($percentage, 2)+"% )")
+}
+if ($olderthanwin7 -gt 0){
+    $percentage=1/$winclientcount*$olderthanwin7*100
+    Write-Warning ("Windows-Clients older than Windows 7: " + $olderthanwin7 + " ( "+ [math]::Round($percentage, 2)+"% )")
+}
+if ($win7 -gt 0){
+    $percentage=1/$winclientcount*$win7*100
+    Write-Warning ("Windows-Clients with Windows 7: " + $win7 + " ( "+ [math]::Round($percentage, 2)+"% )")
+}
+if ($win10 -gt 0){
+    $percentage=1/$winclientcount*$win10*100
+    Write-Host ("Windows-Clients with Windows 10: " + $win10 + " ( "+ [math]::Round($percentage, 2)+"% )")
+}
+if ($win11 -gt 0){
+    $percentage=1/$winclientcount*$win11*100
+    Write-Host ("Windows-Clients with Windows 11: " + $win11 + " ( "+ [math]::Round($percentage, 2)+"% )")
+}
+

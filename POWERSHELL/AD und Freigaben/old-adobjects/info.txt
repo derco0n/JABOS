@@ -1,0 +1,1 @@
+This set of scripts can be used to disable and reenable AD-objects that haven't been used for a long time or are inactive.

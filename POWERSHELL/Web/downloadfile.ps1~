@@ -1,0 +1,1 @@
+$url="http://linuxinfra01.klinikum.lippe.intra:8080/check-mk-agent-latest.msi";$parts=$url.split('/');$filename=$parts[$parts.count-1];$WebClient = New-Object System.Net.WebClient;$WebClient.DownloadFile($url,"C:\temp\"+$filename)
